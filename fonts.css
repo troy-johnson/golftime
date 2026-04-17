@@ -1,0 +1,19 @@
+import { createBrowserRouter } from 'react-router';
+import { Root } from './pages/Root';
+import { SearchPage } from './pages/SearchPage';
+import { ResultsPage } from './pages/ResultsPage';
+import { WeatherPage } from './pages/WeatherPage';
+import { SavedCoursesPage } from './pages/SavedCoursesPage';
+
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    Component: Root,
+    children: [
+      { index: true, Component: SearchPage },
+      { path: 'results', Component: ResultsPage },
+      { path: 'weather', Component: WeatherPage },
+      { path: 'saved', Component: SavedCoursesPage },
+    ],
+  },
+]);
