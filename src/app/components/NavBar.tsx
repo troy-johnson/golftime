@@ -1,8 +1,7 @@
 import { Link, useLocation } from 'react-router';
-import { Bell, MapPin } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import svgPaths from '../../imports/svg-498ksxb0qk';
-import imgGradient from 'figma:asset/93ebc9d7f2bc1c25d4ec06c8311466023a117bdb.png';
 
 export function NavBar() {
   const location = useLocation();
@@ -69,7 +68,7 @@ export function NavBar() {
 
       {/* Gradient bar */}
       <div className="h-[3px] w-full">
-        <img src={imgGradient} alt="" className="w-full h-full object-cover pointer-events-none" />
+        <div className="w-full h-full" style={{ background: 'linear-gradient(90deg, #fcd400 0%, #22c55e 50%, #059669 100%)' }} />
       </div>
     </nav>
   );

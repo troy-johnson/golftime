@@ -1,12 +1,15 @@
-import { Outlet } from 'react-router';
 import { NavBar } from '../components/NavBar';
 
-export function Root() {
+interface RootProps {
+  children?: React.ReactNode;
+}
+
+export function Root({ children }: RootProps) {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#f0fdf4' }}>
       <NavBar />
       <main className="flex-1">
-        <Outlet />
+        {children}
       </main>
     </div>
   );

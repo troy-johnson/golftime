@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { MapPin, ChevronDown, ArrowRight, Sun, Cloud, CloudRain, Wind } from 'lucide-react';
 import { useApp, SearchParams } from '../context/AppContext';
 import { weekWeather } from '../data/mockData';
-import imgHero from 'figma:asset/898343feca395a20781642ae1ab9565febe9779b.png';
+const heroImageUrl = 'https://images.unsplash.com/photo-1587174486073-ae5e5cff23cb?w=1200&h=600&fit=crop';
 
 const RADIUS_OPTIONS = [5, 10, 25, 50];
 const TIME_OPTIONS = [
@@ -43,7 +43,7 @@ export function SearchPage() {
       {/* Hero */}
       <div className="relative h-[420px] overflow-hidden">
         <img
-          src={imgHero}
+          src={heroImageUrl}
           alt="Golf course"
           className="absolute inset-0 w-full h-full object-cover"
           style={{ objectPosition: 'center 30%' }}

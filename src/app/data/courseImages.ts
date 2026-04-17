@@ -1,7 +1,8 @@
-import murrayParkway from 'figma:asset/a37cda95ae22a352a5718ecd8d306bbfd927a4be.png';
-import mickRiley from 'figma:asset/100af95c520e39eaa7e4a04c27307fbe6d33736a.png';
-import oldMill from 'figma:asset/53f8896a898973f546cc837ad6f04d7eb425893b.png';
-import riverOaks from 'figma:asset/a44cee5dca3cfa16925ad60c569daa03d1d66b55.png';
+// Using placeholder images - replace with actual assets later
+const murrayParkway = 'https://images.unsplash.com/photo-1512952663859-99b088280430?w=400&h=300&fit=crop';
+const mickRiley = 'https://images.unsplash.com/photo-1631294913162-c44a1c4af0f7?w=400&h=300&fit=crop';
+const oldMill = 'https://images.unsplash.com/photo-1764562206914-78ab352f4658?w=400&h=300&fit=crop';
+const riverOaks = 'https://images.unsplash.com/photo-1645149837377-d9c7139a8ea8?w=400&h=300&fit=crop';
 
 export const courseImages: Record<string, string> = {
   'murray-parkway': murrayParkway,
