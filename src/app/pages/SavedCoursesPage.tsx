@@ -1,14 +1,14 @@
 import { Link, useNavigate } from 'react-router';
 import { Heart, Search, ArrowRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { allCourses } from '../data/mockData';
+import { catalogCourses, trackedCourseCount } from '../data/courseCatalog';
 import { CourseCard } from '../components/CourseCard';
 
 export function SavedCoursesPage() {
   const { savedCourseIds, searchParams } = useApp();
   const navigate = useNavigate();
 
-  const savedCourses = allCourses.filter(c => savedCourseIds.includes(c.id));
+  const savedCourses = catalogCourses.filter(course => savedCourseIds.includes(course.id));
 
   function handleSearchSaved() {
     navigate('/results');
@@ -17,10 +17,7 @@ export function SavedCoursesPage() {
   if (savedCourses.length === 0) {
     return (
       <div className="max-w-screen-lg mx-auto px-6 py-16 flex flex-col items-center text-center">
-        <div
-          className="w-20 h-20 rounded-full flex items-center justify-center mb-6"
-          style={{ background: '#ecfdf5' }}
-        >
+        <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6" style={{ background: '#ecfdf5' }}>
           <Heart size={32} style={{ color: '#004d34' }} />
         </div>
         <h1
@@ -40,13 +37,12 @@ export function SavedCoursesPage() {
             fontFamily: "'Public Sans', sans-serif",
             fontSize: 16,
             color: '#3f4943',
-            maxWidth: 400,
+            maxWidth: 460,
             lineHeight: 1.6,
             marginBottom: 32,
           }}
         >
-          Tap the heart icon on any course card to save it here for quick access when planning your
-          next round.
+          Tap the heart icon on any course card to save it here. We’re currently tracking {trackedCourseCount} courses around 84123 and gradually wiring live tee times into each provider.
         </p>
         <Link
           to="/results"
@@ -70,7 +66,6 @@ export function SavedCoursesPage() {
 
   return (
     <div className="max-w-screen-xl mx-auto px-6 py-10">
-      {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
           <h1
@@ -92,7 +87,7 @@ export function SavedCoursesPage() {
               color: '#3f4943',
             }}
           >
-            {savedCourses.length} course{savedCourses.length !== 1 ? 's' : ''} saved to your group's favorites
+            {savedCourses.length} course{savedCourses.length !== 1 ? 's' : ''} saved to your group&apos;s shortlist
           </p>
         </div>
         <button
@@ -115,7 +110,6 @@ export function SavedCoursesPage() {
         </button>
       </div>
 
-      {/* Saved Course Grid */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         {savedCourses.map(course => (
           <CourseCard
@@ -128,11 +122,7 @@ export function SavedCoursesPage() {
         ))}
       </div>
 
-      {/* Browse More */}
-      <div
-        className="mt-12 px-8 py-6 rounded-sm flex items-center justify-between"
-        style={{ background: '#ecfdf5' }}
-      >
+      <div className="mt-12 px-8 py-6 rounded-sm flex items-center justify-between" style={{ background: '#ecfdf5' }}>
         <div>
           <h3
             style={{
@@ -152,7 +142,7 @@ export function SavedCoursesPage() {
               color: '#3f4943',
             }}
           >
-            {allCourses.length - savedCourses.length} other public courses in the Salt Lake Valley area.
+            {trackedCourseCount - savedCourses.length} additional tracked courses are available across the Wasatch Front.
           </p>
         </div>
         <Link

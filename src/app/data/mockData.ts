@@ -33,7 +33,7 @@ export interface WeatherDay {
   dayFull: string;
   date: string;
   condition: string;
-  conditionIcon: 'sunny' | 'partly-cloudy' | 'cloudy' | 'rainy' | 'windy' | 'thunderstorm' | 'snow';
+  conditionIcon: string;
   high: number;
   low: number;
   windMph: number;

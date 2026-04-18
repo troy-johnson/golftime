@@ -36,3 +36,9 @@ coverage
 
 # Serena
 .serena
+
+# Vercel
+.vercel
+
+# Playwright
+.playwright-cli

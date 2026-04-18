@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   Sun,
   Cloud,
@@ -7,8 +8,13 @@ import {
   Thermometer,
   Eye,
   Zap,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
-import { weekWeather, currentWeather, WeatherDay } from '../data/mockData';
+import { WeatherDay } from '../data/mockData';
+import { fetchWeather, clearWeatherCache, toWeatherDays } from '../services/weatherService';
+import type { CurrentWeatherData, DailyForecast } from '../data/weatherTypes';
+import { getUvDescription } from '../data/weatherMappings';
 
 function WeatherIcon({ icon, size = 24, className = '' }: { icon: string; size?: number; className?: string }) {
   if (icon === 'sunny') return <Sun size={size} className={className} style={{ color: '#fcd400' }} />;
@@ -202,14 +208,14 @@ function StatRow({ icon, label, children }: { icon: React.ReactNode; label: stri
 function SevenDayCard({ day }: { day: WeatherDay }) {
   return (
     <div
-      className="flex items-center gap-4 px-5 py-3 rounded-sm transition-all"
+      className="flex flex-wrap md:flex-nowrap items-center gap-2 md:gap-4 px-3 md:px-5 py-3 rounded-sm transition-all"
       style={{
         background: day.isWeekend ? '#ecfdf5' : '#ffffff',
         boxShadow: day.isWeekend ? '0 2px 12px rgba(0,77,52,0.08)' : 'none',
         borderLeft: day.isWeekend ? '3px solid #fcd400' : '3px solid transparent',
       }}
     >
-      <div style={{ width: 44 }}>
+      <div className="min-w-[40px]">
         <div
           style={{
             fontFamily: "'Public Sans', sans-serif",
@@ -232,22 +238,22 @@ function SevenDayCard({ day }: { day: WeatherDay }) {
         </div>
       </div>
 
-      <div style={{ width: 32 }}>
+      <div className="hidden sm:block" style={{ width: 28 }}>
         <WeatherIcon icon={day.conditionIcon} size={20} />
       </div>
 
       <div
+        className="hidden sm:block flex-1"
         style={{
           fontFamily: "'Public Sans', sans-serif",
           fontSize: 12,
           color: '#3f4943',
-          flex: 1,
         }}
       >
         {day.condition}
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1">
         <Wind size={11} style={{ color: 'rgba(63,73,67,0.5)' }} />
         <span style={{ fontFamily: "'Public Sans', sans-serif", fontSize: 11, color: 'rgba(63,73,67,0.6)' }}>
           {day.windMph}mph
@@ -261,25 +267,90 @@ function SevenDayCard({ day }: { day: WeatherDay }) {
         </span>
       </div>
 
-      <div style={{ width: 60, textAlign: 'right' }}>
-        <span style={{ fontFamily: "'Noto Serif', serif", fontSize: 15, fontWeight: 600, color: '#004d34' }}>
-          {day.high}°
-        </span>
-        <span style={{ fontFamily: "'Public Sans', sans-serif", fontSize: 13, color: 'rgba(63,73,67,0.5)', marginLeft: 4 }}>
-          {day.low}°
-        </span>
-      </div>
+      <div className="flex items-center gap-2 ml-auto">
+        <div className="min-w-[50px] text-right">
+          <span style={{ fontFamily: "'Noto Serif', serif", fontSize: 15, fontWeight: 600, color: '#004d34' }}>
+            {day.high}°
+          </span>
+          <span style={{ fontFamily: "'Public Sans', sans-serif", fontSize: 13, color: 'rgba(63,73,67,0.5)', marginLeft: 4 }}>
+            {day.low}°
+          </span>
+        </div>
 
-      <div style={{ width: 60 }}>
-        <GolfRating day={day} />
+        <div className="min-w-[55px] hidden sm:block">
+          <GolfRating day={day} />
+        </div>
       </div>
     </div>
   );
 }
 
 export function WeatherPage() {
-  const current = currentWeather;
-  const weekendDays = weekWeather.filter(d => d.isWeekend);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [current, setCurrent] = useState<CurrentWeatherData | null>(null);
+  const [dailyForecast, setDailyForecast] = useState<DailyForecast[]>([]);
+
+  const loadWeather = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchWeather();
+      setCurrent(data.current);
+      setDailyForecast(data.daily);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load weather');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    clearWeatherCache();
+    loadWeather();
+  };
+
+  useEffect(() => {
+    loadWeather();
+  }, []);
+
+  const weekendDays = dailyForecast.filter(d => d.isWeekend);
+  const weekWeather = toWeatherDays(dailyForecast);
+
+  if (loading && !current) {
+    return (
+      <div className="max-w-screen-lg mx-auto px-6 py-10 flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 size={40} className="animate-spin" style={{ color: '#004d34' }} />
+          <p style={{ fontFamily: "'Public Sans', sans-serif", fontSize: 14, color: 'rgba(63,73,67,0.7)' }}>
+            Loading weather data...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !current) {
+    return (
+      <div className="max-w-screen-lg mx-auto px-6 py-10">
+        <div className="flex flex-col items-center gap-4 p-8 rounded-sm" style={{ background: '#fef2f2' }}>
+          <p style={{ fontFamily: "'Public Sans', sans-serif", fontSize: 14, color: '#dc2626' }}>
+            {error}
+          </p>
+          <button
+            onClick={loadWeather}
+            className="px-4 py-2 rounded-sm font-medium"
+            style={{ background: '#004d34', color: '#fff' }}
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback for initial render before data loads
+  if (!current) return null;
 
   return (
     <div className="max-w-screen-lg mx-auto px-6 py-10">
@@ -297,15 +368,29 @@ export function WeatherPage() {
         >
           Salt Lake Valley Weather
         </h1>
-        <p
-          style={{
-            fontFamily: "'Public Sans', sans-serif",
-            fontSize: 14,
-            color: 'rgba(63,73,67,0.7)',
-          }}
-        >
-          Current conditions & weekend forecast for your rounds · Updated {current.updated}
-        </p>
+        <div className="flex items-center gap-3">
+          <p
+            style={{
+              fontFamily: "'Public Sans', sans-serif",
+              fontSize: 14,
+              color: 'rgba(63,73,67,0.7)',
+            }}
+          >
+            Current conditions & weekend forecast for your rounds · Updated {current.updated}
+          </p>
+          <button
+            onClick={handleRefresh}
+            className="p-1.5 rounded-sm hover:bg-opacity-10"
+            style={{ background: 'rgba(0,77,52,0.1)' }}
+            title="Clear cache & refresh"
+          >
+            {loading ? (
+              <Loader2 size={14} className="animate-spin" style={{ color: '#004d34' }} />
+            ) : (
+              <RefreshCw size={14} style={{ color: '#004d34' }} />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Current Conditions */}
@@ -313,9 +398,9 @@ export function WeatherPage() {
         className="rounded-sm mb-8 overflow-hidden"
         style={{ background: '#004d34', boxShadow: '0 8px 40px rgba(0,77,52,0.25)' }}
       >
-        <div className="flex items-stretch">
+        <div className="flex flex-col md:flex-row items-stretch">
           {/* Big Temp */}
-          <div className="flex-1 px-10 py-8">
+          <div className="flex-1 px-6 md:px-10 py-6 md:py-8">
             <div
               style={{
                 fontFamily: "'Public Sans', sans-serif",
@@ -329,14 +414,14 @@ export function WeatherPage() {
             >
               Now · {current.location}
             </div>
-            <div className="flex items-center gap-6">
-              <WeatherIcon icon={current.conditionIcon} size={64} />
+            <div className="flex items-center gap-4 md:gap-6">
+              <WeatherIcon icon={current.conditionIcon} size={48} />
               <div>
                 <div
                   style={{
                     fontFamily: "'Noto Serif', serif",
                     fontWeight: 300,
-                    fontSize: 72,
+                    fontSize: 56,
                     color: '#ecfdf5',
                     letterSpacing: '-2px',
                     lineHeight: 1,
@@ -347,7 +432,7 @@ export function WeatherPage() {
                 <div
                   style={{
                     fontFamily: "'Public Sans', sans-serif",
-                    fontSize: 16,
+                    fontSize: 14,
                     color: 'rgba(209,250,229,0.7)',
                     marginTop: 4,
                   }}
@@ -360,8 +445,8 @@ export function WeatherPage() {
 
           {/* Stats */}
           <div
-            className="flex flex-col justify-center gap-4 px-8 py-6"
-            style={{ background: 'rgba(255,255,255,0.06)', minWidth: 200 }}
+            className="flex flex-row flex-wrap md:flex-col justify-center gap-3 md:gap-4 px-6 md:px-8 py-4 md:py-6"
+            style={{ background: 'rgba(255,255,255,0.06)', minWidth: 'auto' }}
           >
             <StatRow icon={<Wind size={14} style={{ color: '#facc15' }} />} label="Wind">
               {current.windMph} mph {current.windDir}
@@ -370,7 +455,7 @@ export function WeatherPage() {
               {current.humidity}%
             </StatRow>
             <StatRow icon={<Zap size={14} style={{ color: '#fbbf24' }} />} label="UV Index">
-              {current.uvIndex} (Moderate)
+              {current.uvIndex} ({getUvDescription(current.uvIndex)})
             </StatRow>
             <StatRow icon={<Eye size={14} style={{ color: 'rgba(209,250,229,0.7)' }} />} label="Visibility">
               {current.visibility}
@@ -410,7 +495,7 @@ export function WeatherPage() {
             Golf Days
           </span>
         </div>
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-4">
           {weekendDays.map(day => (
             <WeekendDayCard key={day.dayShort} day={day} />
           ))}

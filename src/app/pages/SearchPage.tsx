@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, ChevronDown, ArrowRight, Sun, Cloud, CloudRain, Wind } from 'lucide-react';
+import { MapPin, ChevronDown, ArrowRight, Sun, Cloud, CloudRain, Wind, Loader2 } from 'lucide-react';
 import { useApp, SearchParams } from '../context/AppContext';
+import { fetchWeather, toWeatherDays } from '../services/weatherService';
+import type { DailyForecast } from '../data/weatherTypes';
 import { weekWeather } from '../data/mockData';
+import { chronogolfEnabledCourseCount, trackedCourseCount } from '../data/courseCatalog';
 const heroImageUrl = 'https://images.unsplash.com/photo-1587174486073-ae5e5cff23cb?w=1200&h=600&fit=crop';
 
 const RADIUS_OPTIONS = [5, 10, 25, 50];
@@ -26,7 +29,26 @@ export function SearchPage() {
 
   const [form, setForm] = useState<SearchParams>(searchParams);
 
-  const weekendDays = weekWeather.filter(d => d.isWeekend);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [weekendDays, setWeekendDays] = useState<typeof weekWeather>([]);
+
+  useEffect(() => {
+    async function loadWeather() {
+      try {
+        const data = await fetchWeather();
+        const days = toWeatherDays(data.daily).filter(d => d.isWeekend);
+        setWeekendDays(days);
+      } catch {
+        // Fallback to mock data on error
+        setWeekendDays(weekWeather.filter(d => d.isWeekend));
+      } finally {
+        setWeatherLoading(false);
+      }
+    }
+    loadWeather();
+  }, []);
+
+  // Also keep weekendDays available for the page
 
   function update<K extends keyof SearchParams>(key: K, value: SearchParams[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -75,7 +97,13 @@ export function SearchPage() {
 
         {/* Weekend Weather Strip */}
         <div className="absolute top-6 right-6 flex gap-2">
-          {weekendDays.map(day => (
+          {weatherLoading && (
+            <div className="flex items-center gap-1 px-2 py-1 rounded-sm" style={{ background: 'rgba(255,255,255,0.9)' }}>
+              <Loader2 size={12} className="animate-spin" style={{ color: '#004d34' }} />
+              <span style={{ fontSize: 11, color: '#004d34' }}>Loading...</span>
+            </div>
+          )}
+          {!weatherLoading && weekendDays.map(day => (
             <div
               key={day.dayShort}
               className="flex flex-col items-center gap-1 px-3 py-2 rounded"
@@ -359,8 +387,8 @@ export function SearchPage() {
           {[
             {
               icon: '⛳',
-              title: '8 Courses Nearby',
-              body: 'All public courses within 25 miles of Murray, UT — updated daily.',
+              title: `${trackedCourseCount} Courses Tracked`,
+              body: `${chronogolfEnabledCourseCount} currently load live Chronogolf tee times. Reduce range after search to narrow the board.`,
             },
             {
               icon: '🌤',

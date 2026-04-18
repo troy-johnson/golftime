@@ -1,8 +1,17 @@
-import { useState, useMemo } from 'react';
-import { SlidersHorizontal, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { SlidersHorizontal, X, ChevronDown, ChevronUp, RefreshCw, Calendar, MapPin } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { CourseCard } from '../components/CourseCard';
-import { allCourses } from '../data/mockData';
+import {
+  catalogCourses,
+  chronogolfEnabledCourseCount,
+  trackedCourseCount,
+  type CatalogCourse,
+} from '../data/courseCatalog';
+import { clearTeeTimeCache, loadChronogolfCourses } from '../services/teeTimeService';
+
+// Distance options in miles
+const DISTANCE_OPTIONS = [5, 10, 25, 50];
 
 type SortOption = 'distance' | 'price' | 'rating';
 type MaxPrice = 20 | 35 | 50 | 75 | 999;
@@ -45,7 +54,8 @@ function FilterSection({
             color: '#3f4943',
           }}
         >
-          {icon && `${icon} `}{title}
+          {icon && `${icon} `}
+          {title}
         </span>
         {open ? <ChevronUp size={14} style={{ color: '#3f4943' }} /> : <ChevronDown size={14} style={{ color: '#3f4943' }} />}
       </button>
@@ -54,15 +64,7 @@ function FilterSection({
   );
 }
 
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       onClick={onClick}
@@ -85,16 +87,29 @@ function Chip({
 
 function formatDate(dateStr: string): string {
   try {
-    const d = new Date(dateStr + 'T12:00:00');
+    const d = new Date(`${dateStr}T12:00:00`);
     return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   } catch {
     return dateStr;
   }
 }
 
+function formatUpdatedAt(value: string | null) {
+  if (!value) return 'Not loaded yet';
+  return new Date(value).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
 export function ResultsPage() {
-  const { searchParams } = useApp();
+  const { searchParams, setSearchParams } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [fromCache, setFromCache] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(searchParams.date);
+  const [liveCourses, setLiveCourses] = useState<CatalogCourse[]>(
+    catalogCourses.filter(course => course.liveTeeTimesEnabled)
+  );
   const [filters, setFilters] = useState<Filters>({
     holes: searchParams.holes as Filters['holes'],
     timeWindow: searchParams.timeWindow,
@@ -104,53 +119,111 @@ export function ResultsPage() {
     sort: 'distance',
   });
 
+  const loadCourses = useCallback(
+    async (forceRefresh = false) => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const result = await loadChronogolfCourses(selectedDate, forceRefresh);
+        setLiveCourses(result.courses);
+        setLastUpdated(result.fetchedAt);
+        setFromCache(result.fromCache);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to load Chronogolf tee times right now.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [selectedDate]
+  );
+
+  // Load courses when date changes
+  useEffect(() => {
+    void loadCourses(false);
+  }, [loadCourses]);
+
+  function handleDateChange(newDate: string) {
+    setSelectedDate(newDate);
+    clearTeeTimeCache(newDate);
+    async function loadNewDate() {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await loadChronogolfCourses(newDate, true);
+        setLiveCourses(result.courses);
+        setLastUpdated(result.fetchedAt);
+        setFromCache(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to load tee times for selected date.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    void loadNewDate();
+  }
+
+  async function handleRefresh() {
+    clearTeeTimeCache(selectedDate);
+    await loadCourses(true);
+  }
+
   function updateFilter<K extends keyof Filters>(key: K, val: Filters[K]) {
     setFilters(prev => ({ ...prev, [key]: val }));
   }
 
+  const trackedWithinRange = useMemo(
+    () => catalogCourses.filter(course => course.distance <= filters.maxDistance),
+    [filters.maxDistance]
+  );
+
+  const chronogolfWithinRange = useMemo(
+    () => trackedWithinRange.filter(course => course.liveTeeTimesEnabled),
+    [trackedWithinRange]
+  );
+
+  const upcomingIntegrationsCount = trackedWithinRange.length - chronogolfWithinRange.length;
+
   const filteredCourses = useMemo(() => {
-    let list = allCourses.filter(c => {
-      // Distance
-      if (c.distance > filters.maxDistance) return false;
-      // Holes
-      if (filters.holes !== 'any') {
-        if (!c.holes.includes(Number(filters.holes))) return false;
-      }
-      // Price filter
-      const walkPrices = c.teeTimes
-        .filter(t => filters.holes === 'any' || t.holes === Number(filters.holes))
-        .map(t => t.walkingPrice);
+    let list = liveCourses.filter(course => {
+      // Must have tee times
+      if (!course.teeTimes || course.teeTimes.length === 0) return false;
+      
+      if (course.distance > filters.maxDistance) return false;
+      if (filters.holes !== 'any' && !course.holes.includes(Number(filters.holes))) return false;
+
+      const walkPrices = course.teeTimes
+        .filter(time => filters.holes === 'any' || time.holes === Number(filters.holes))
+        .map(time => time.walkingPrice);
+
       if (walkPrices.length && Math.min(...walkPrices) > filters.maxWalkingPrice) return false;
 
-      // Has available times
-      const hasAvailableTime = c.teeTimes.some(t => {
-        const holesOk = filters.holes === 'any' || t.holes === Number(filters.holes);
-        const timeOk = filters.timeWindow === 'any' || t.period === filters.timeWindow;
-        const availOk = t.available >= (filters.groupSize >= 5 ? 4 : filters.groupSize);
+      // Must have at least one available time slot matching filters
+      return course.teeTimes.some(time => {
+        const holesOk = filters.holes === 'any' || time.holes === Number(filters.holes);
+        const timeOk = filters.timeWindow === 'any' || time.period === filters.timeWindow;
+        const availOk = time.available >= (filters.groupSize >= 5 ? 4 : filters.groupSize);
         return holesOk && timeOk && availOk;
       });
-      return hasAvailableTime;
     });
 
-    // Sort
     list = [...list].sort((a, b) => {
       if (filters.sort === 'distance') return a.distance - b.distance;
       if (filters.sort === 'rating') return b.rating - a.rating;
       if (filters.sort === 'price') {
-        const aMin = Math.min(...a.teeTimes.map(t => t.walkingPrice));
-        const bMin = Math.min(...b.teeTimes.map(t => t.walkingPrice));
+        const aMin = Math.min(...a.teeTimes.map(time => time.walkingPrice));
+        const bMin = Math.min(...b.teeTimes.map(time => time.walkingPrice));
         return aMin - bMin;
       }
       return 0;
     });
 
     return list;
-  }, [filters]);
+  }, [filters, liveCourses]);
 
   return (
     <div className="max-w-screen-xl mx-auto px-6 py-8">
-      {/* Page Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex items-start justify-between mb-8 gap-6">
         <div>
           <h1
             style={{
@@ -162,7 +235,7 @@ export function ResultsPage() {
               marginBottom: 4,
             }}
           >
-            {filteredCourses.length} Course{filteredCourses.length !== 1 ? 's' : ''} Available
+            {loading ? 'Loading tee times…' : `${filteredCourses.length} Course${filteredCourses.length !== 1 ? 's' : ''} Available`}
           </h1>
           <p
             style={{
@@ -173,9 +246,64 @@ export function ResultsPage() {
           >
             {formatDate(searchParams.date)} · Near {searchParams.location} · Within {filters.maxDistance} miles
           </p>
+          <p
+            className="mt-2"
+            style={{
+              fontFamily: "'Public Sans', sans-serif",
+              fontSize: 12,
+              color: '#047857',
+            }}
+          >
+            Tracking {trackedCourseCount} courses overall · {chronogolfEnabledCourseCount} currently live through Chronogolf · {upcomingIntegrationsCount} more in-range courses still need tee-time integrations.
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Sort */}
+
+        <div className="flex flex-wrap items-center gap-2 md:gap-3 justify-between md:justify-end w-full">
+          <div
+            className="px-3 py-2 rounded-sm"
+            style={{ background: '#ecfdf5', minWidth: 220 }}
+          >
+            <div
+              style={{
+                fontFamily: "'Public Sans', sans-serif",
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: '1px',
+                textTransform: 'uppercase',
+                color: '#047857',
+              }}
+            >
+              Chronogolf status
+            </div>
+            <div
+              style={{
+                fontFamily: "'Public Sans', sans-serif",
+                fontSize: 12,
+                color: '#3f4943',
+                marginTop: 2,
+              }}
+            >
+              {fromCache ? 'Cached data' : 'Fresh data'} · Updated {formatUpdatedAt(lastUpdated)}
+            </div>
+          </div>
+
+          <button
+            onClick={handleRefresh}
+            className="flex items-center gap-2 px-4 py-2 rounded-sm"
+            style={{
+              fontFamily: "'Public Sans', sans-serif",
+              fontSize: 12,
+              fontWeight: 700,
+              background: '#004d34',
+              color: '#ffffff',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <RefreshCw size={13} />
+            Clear Cache + Refresh
+          </button>
+
           <div className="flex items-center gap-1">
             <span
               style={{
@@ -189,27 +317,28 @@ export function ResultsPage() {
             >
               Sort:
             </span>
-            {(['distance', 'rating', 'price'] as SortOption[]).map(s => (
+            {(['distance', 'rating', 'price'] as SortOption[]).map(sort => (
               <button
-                key={s}
-                onClick={() => updateFilter('sort', s)}
+                key={sort}
+                onClick={() => updateFilter('sort', sort)}
                 className="px-3 py-1.5 rounded-sm capitalize transition-all"
                 style={{
                   fontFamily: "'Public Sans', sans-serif",
                   fontSize: 12,
-                  fontWeight: filters.sort === s ? 700 : 400,
-                  background: filters.sort === s ? '#004d34' : 'transparent',
-                  color: filters.sort === s ? '#ffffff' : '#3f4943',
+                  fontWeight: filters.sort === sort ? 700 : 400,
+                  background: filters.sort === sort ? '#004d34' : 'transparent',
+                  color: filters.sort === sort ? '#ffffff' : '#3f4943',
                   border: 'none',
                   cursor: 'pointer',
                 }}
               >
-                {s}
+                {sort}
               </button>
             ))}
           </div>
+
           <button
-            onClick={() => setSidebarOpen(o => !o)}
+            onClick={() => setSidebarOpen(open => !open)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm"
             style={{
               fontFamily: "'Public Sans', sans-serif",
@@ -227,18 +356,43 @@ export function ResultsPage() {
         </div>
       </div>
 
-      <div className="flex gap-8">
-        {/* Sidebar */}
+      {error && (
+        <div
+          className="mb-6 px-4 py-3 rounded-sm"
+          style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid rgba(153,27,27,0.15)' }}
+        >
+          {error}
+        </div>
+      )}
+
+      <div className="flex flex-col md:flex-row gap-4 md:gap-8 w-full max-w-full">
+        {/* Mobile filter toggle button */}
+        <button
+          onClick={() => setSidebarOpen(open => !open)}
+          className="md:hidden flex items-center justify-center gap-2 px-4 py-2 rounded-sm w-full max-w-full"
+          style={{
+            fontFamily: "'Public Sans', sans-serif",
+            fontSize: 12,
+            fontWeight: 600,
+            background: '#ecfdf5',
+            color: '#004d34',
+            border: 'none',
+            cursor: 'pointer',
+            boxSizing: 'border-box',
+          }}
+        >
+          <SlidersHorizontal size={13} />
+          {sidebarOpen ? 'Hide Filters' : 'Show Filters'}
+        </button>
+
         {sidebarOpen && (
           <aside
-            className="w-64 flex-shrink-0"
+            className="w-full md:w-64 md:flex-shrink-0 max-w-full"
             style={{
               background: '#ecfdf5',
-              padding: '24px 20px',
-              borderRadius: 2,
-              alignSelf: 'flex-start',
-              position: 'sticky',
-              top: 80,
+              padding: '12px',
+              borderRadius: '4px',
+              boxSizing: 'border-box',
             }}
           >
             <div className="flex items-center justify-between mb-5">
@@ -260,34 +414,50 @@ export function ResultsPage() {
               </button>
             </div>
 
-            {/* Group Size */}
+            <FilterSection title="Date" icon="📅">
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={e => handleDateChange(e.target.value)}
+                className="w-full px-3 py-2 rounded-sm"
+                style={{
+                  fontFamily: "'Public Sans', sans-serif",
+                  fontSize: 12,
+                  background: '#ffffff',
+                  color: '#004d34',
+                  border: '1px solid rgba(0,77,52,0.2)',
+                  cursor: 'pointer',
+                }}
+              />
+            </FilterSection>
+
+            <FilterSection title="Distance" icon="📍">
+              <div className="flex flex-wrap gap-1.5">
+                {DISTANCE_OPTIONS.map(dist => (
+                  <Chip
+                    key={dist}
+                    active={filters.maxDistance === dist}
+                    onClick={() => updateFilter('maxDistance', dist)}
+                  >
+                    {dist} mi
+                  </Chip>
+                ))}
+              </div>
+            </FilterSection>
+
             <FilterSection title="Group Size" icon="👥">
               <div className="flex gap-1.5 flex-wrap">
-                {[1, 2, 3, 4].map(n => (
-                  <Chip key={n} active={filters.groupSize === n} onClick={() => updateFilter('groupSize', n)}>
-                    {n}
+                {[1, 2, 3, 4].map(value => (
+                  <Chip key={value} active={filters.groupSize === value} onClick={() => updateFilter('groupSize', value)}>
+                    {value}
                   </Chip>
                 ))}
                 <Chip active={filters.groupSize >= 5} onClick={() => updateFilter('groupSize', 5)}>
                   5+
                 </Chip>
               </div>
-              {filters.groupSize >= 5 && (
-                <p
-                  className="mt-2"
-                  style={{
-                    fontFamily: "'Public Sans', sans-serif",
-                    fontSize: 11,
-                    color: '#047857',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Showing consecutive tee time blocks for large groups.
-                </p>
-              )}
             </FilterSection>
 
-            {/* Time of Day */}
             <FilterSection title="Time of Day" icon="🕐">
               <div className="flex flex-col gap-1.5">
                 <Chip active={filters.timeWindow === 'any'} onClick={() => updateFilter('timeWindow', 'any')}>
@@ -305,7 +475,6 @@ export function ResultsPage() {
               </div>
             </FilterSection>
 
-            {/* Holes */}
             <FilterSection title="Number of Holes" icon="⛳">
               <div className="flex gap-2">
                 <Chip active={filters.holes === 'any'} onClick={() => updateFilter('holes', 'any')}>
@@ -320,40 +489,16 @@ export function ResultsPage() {
               </div>
             </FilterSection>
 
-            {/* Price */}
             <FilterSection title="Max Walking Price" icon="💰">
               <div className="flex flex-col gap-1.5">
-                {([20, 35, 50, 75, 999] as MaxPrice[]).map(p => (
-                  <Chip key={p} active={filters.maxWalkingPrice === p} onClick={() => updateFilter('maxWalkingPrice', p)}>
-                    {p === 999 ? 'Any Price' : `Under $${p}`}
-                  </Chip>
-                ))}
-              </div>
-              <p
-                className="mt-3"
-                style={{
-                  fontFamily: "'Public Sans', sans-serif",
-                  fontSize: 11,
-                  color: 'rgba(63,73,67,0.6)',
-                  lineHeight: 1.5,
-                }}
-              >
-                Cart fees are ~40% above walking rate. Toggle on each card.
-              </p>
-            </FilterSection>
-
-            {/* Distance */}
-            <FilterSection title="Max Distance" icon="📍" defaultOpen={false}>
-              <div className="flex flex-col gap-1.5">
-                {[5, 10, 25, 50].map(d => (
-                  <Chip key={d} active={filters.maxDistance === d} onClick={() => updateFilter('maxDistance', d)}>
-                    Within {d} miles
+                {([20, 35, 50, 75, 999] as MaxPrice[]).map(price => (
+                  <Chip key={price} active={filters.maxWalkingPrice === price} onClick={() => updateFilter('maxWalkingPrice', price)}>
+                    {price === 999 ? 'Any Price' : `Under $${price}`}
                   </Chip>
                 ))}
               </div>
             </FilterSection>
 
-            {/* Reset */}
             <button
               onClick={() =>
                 setFilters({
@@ -381,9 +526,31 @@ export function ResultsPage() {
           </aside>
         )}
 
-        {/* Results Grid */}
-        <div className="flex-1">
-          {filteredCourses.length === 0 ? (
+        <div className="flex-1 w-full min-w-0">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-24 gap-4">
+              <RefreshCw className="animate-spin" size={28} style={{ color: '#047857' }} />
+              <h3
+                style={{
+                  fontFamily: "'Noto Serif', serif",
+                  fontWeight: 400,
+                  fontSize: 22,
+                  color: '#004d34',
+                }}
+              >
+                Loading available tee times…
+              </h3>
+              <p
+                style={{
+                  fontFamily: "'Public Sans', sans-serif",
+                  fontSize: 14,
+                  color: '#3f4943',
+                }}
+              >
+                Pulling live Chronogolf inventory for your selected date.
+              </p>
+            </div>
+          ) : filteredCourses.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 gap-4">
               <div style={{ fontSize: 48 }}>⛳</div>
               <h3
@@ -394,20 +561,22 @@ export function ResultsPage() {
                   color: '#004d34',
                 }}
               >
-                No courses match your filters
+                No live Chronogolf tee times match these filters
               </h3>
               <p
                 style={{
                   fontFamily: "'Public Sans', sans-serif",
                   fontSize: 14,
                   color: '#3f4943',
+                  textAlign: 'center',
+                  maxWidth: 520,
                 }}
               >
-                Try adjusting your price range, distance, or time window.
+                Try expanding your radius or time window. We’re already tracking {trackedWithinRange.length} courses in-range, but only {chronogolfWithinRange.length} have live tee-time integrations so far.
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 w-full max-w-full">
               {filteredCourses.map(course => (
                 <CourseCard
                   key={course.id}

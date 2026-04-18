@@ -37,5 +37,14 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/api/chronogolf': {
+        target: 'https://www.chronogolf.com',
+        changeOrigin: true,
+        rewrite: path => path.replace('/api/chronogolf', '/marketplace/v2/teetimes'),
+      },
+    },
+  },
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })
