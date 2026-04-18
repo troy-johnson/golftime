@@ -43,6 +43,13 @@ export default defineConfig({
         target: 'https://www.chronogolf.com',
         changeOrigin: true,
         rewrite: path => path.replace('/api/chronogolf', '/marketplace/v2/teetimes'),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.chronogolf.com/search',
+          'Origin': 'https://www.chronogolf.com',
+        },
       },
     },
   },
