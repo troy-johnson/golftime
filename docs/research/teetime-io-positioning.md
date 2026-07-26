@@ -3,6 +3,13 @@
 **Research date:** 2026-07-26  
 **Decision:** What, if anything, should GolfTime do now that Tee-Time.io covers much of the planned Utah tee-time discovery job?
 
+> **Status update — 2026-07-26:** Shelved by the product owner. The narrower
+> drive-time-and-trust proposition below is not considered differentiated
+> enough to justify specification or implementation. Preserve this report as
+> competitive evidence; do not treat its recommendation as the active product
+> direction. Resume product planning only after GolfTime identifies and
+> validates a stronger differentiating wedge.
+
 ## Recommendation: narrower complementary niche
 
 GolfTime should **not** race Tee-Time.io for statewide course count, alerts, accounts, voting, editorial course content, or generic “every tee time in one search” positioning.
